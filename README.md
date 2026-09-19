@@ -70,86 +70,34 @@ The RTL follows the standard radix-2 DIT butterfly network one-to-one. It uses t
 
 Data moves left to right through three butterfly stages. Stage numbering follows the RTL, so **Stage 3 is on the input side** and **Stage 1 produces the spectrum**. Each stage doubles the butterfly span $`h`$, merging pairs of smaller sub-transforms into one transform twice the size.
 
-```mermaid
-flowchart LR
-    classDef io   fill:#f6f8fa,stroke:#6e7781,color:#24292f
-    classDef pe2  fill:#dbeafe,stroke:#1d4ed8,stroke-width:1.5px,color:#0c2a6b
-    classDef pe4  fill:#fef3c7,stroke:#b45309,stroke-width:2.5px,color:#4a2505
-    classDef spec fill:#dcfce7,stroke:#15803d,color:#0f3d1f
+```text
+INPUT         STAGE 3        STAGE 2               STAGE 1                          OUTPUT
+bit-reversed  span 1         span 2                span 4                           natural
+              4 x 2-pt DFT   2 x 4-pt DFT          1 x 8-pt DFT
 
-    subgraph SIN["Input frame · bit-reversed wiring"]
-        in0["X_in0 · x[0]"]:::io
-        in4["X_in4 · x[4]"]:::io
-        in2["X_in2 · x[2]"]:::io
-        in6["X_in6 · x[6]"]:::io
-        in1["X_in1 · x[1]"]:::io
-        in5["X_in5 · x[5]"]:::io
-        in3["X_in3 · x[3]"]:::io
-        in7["X_in7 · x[7]"]:::io
-    end
+X_in0  x[0]  ---o--Y3[0]------o-----------Y2[0]-----o-----------------------------> X[0]
+                | bf3_0 W0    | bf2_0 W0            | bf1_0 W0
+X_in4  x[4]  ---o--Y3[1]------|-------o===Y2[1]=====|=======@=====================> X[1]
+                              |       | bf2_1 W2    |       | bf1_1 W1
+X_in2  x[2]  ---o--Y3[2]------o-------|---Y2[2]-----|-------|-------o=============> X[2]
+                | bf3_1 W0            |             |       |       | bf1_2 W2
+X_in6  x[6]  ---o--Y3[3]--------------o===Y2[3]=====|=======|=======|=======@=====> X[3]
+                                                    |       |       |       | bf1_3 W3
+X_in1  x[1]  ---o--Y3[4]------o-----------Y2[4]-----o-------|-------|-------|-----> X[4]
+                | bf3_2 W0    | bf2_2 W0                    |       |       |
+X_in5  x[5]  ---o--Y3[5]------|-------o===Y2[5]=============@=======|=======|=====> X[5]
+                              |       | bf2_3 W2                    |       |
+X_in3  x[3]  ---o--Y3[6]------o-------|---Y2[6]---------------------o=======|=====> X[6]
+                | bf3_3 W0            |                                     |
+X_in7  x[7]  ---o--Y3[7]--------------o===Y2[7]=============================@=====> X[7]
 
-    subgraph ST3["Stage 3 · span 1 · four 2-point DFTs"]
-        bf3_0["bf3_0 · bfly2_4<br/>W⁰ = 1"]:::pe2
-        bf3_1["bf3_1 · bfly2_4<br/>W⁰ = 1"]:::pe2
-        bf3_2["bf3_2 · bfly2_4<br/>W⁰ = 1"]:::pe2
-        bf3_3["bf3_3 · bfly2_4<br/>W⁰ = 1"]:::pe2
-    end
-
-    subgraph ST2["Stage 2 · span 2 · two 4-point DFTs"]
-        bf2_0["bf2_0 · bfly2_4<br/>W⁰ = 1"]:::pe2
-        bf2_1["bf2_1 · bfly2_4<br/>W² = −j"]:::pe2
-        bf2_2["bf2_2 · bfly2_4<br/>W⁰ = 1"]:::pe2
-        bf2_3["bf2_3 · bfly2_4<br/>W² = −j"]:::pe2
-    end
-
-    subgraph ST1["Stage 1 · span 4 · one 8-point DFT"]
-        bf1_0["bf1_0 · bfly2_4<br/>W⁰ = 1"]:::pe2
-        bf1_2["bf1_2 · bfly2_4<br/>W² = −j"]:::pe2
-        bf1_1["bf1_1 · bfly4_4<br/>W¹ = e^(−jπ/4)"]:::pe4
-        bf1_3["bf1_3 · bfly4_4<br/>W³ = e^(−j3π/4)"]:::pe4
-    end
-
-    subgraph SOUT["Spectrum · Y_outKr + j·Y_outKi"]
-        out0["X[0]"]:::spec
-        out4["X[4]"]:::spec
-        out2["X[2]"]:::spec
-        out6["X[6]"]:::spec
-        out1["X[1]"]:::spec
-        out5["X[5]"]:::spec
-        out3["X[3]"]:::spec
-        out7["X[7]"]:::spec
-    end
-
-    in0 & in4 --> bf3_0
-    in2 & in6 --> bf3_1
-    in1 & in5 --> bf3_2
-    in3 & in7 --> bf3_3
-
-    bf3_0 -->|"Y3[0]"| bf2_0
-    bf3_1 -->|"Y3[2]"| bf2_0
-    bf3_0 -->|"Y3[1]"| bf2_1
-    bf3_1 -->|"Y3[3]"| bf2_1
-    bf3_2 -->|"Y3[4]"| bf2_2
-    bf3_3 -->|"Y3[6]"| bf2_2
-    bf3_2 -->|"Y3[5]"| bf2_3
-    bf3_3 -->|"Y3[7]"| bf2_3
-
-    bf2_0 -->|"Y2[0]"| bf1_0
-    bf2_2 -->|"Y2[4]"| bf1_0
-    bf2_0 -->|"Y2[2]"| bf1_2
-    bf2_2 -->|"Y2[6]"| bf1_2
-    bf2_1 ==>|"Y2[1] ∈ ℂ"| bf1_1
-    bf2_3 ==>|"Y2[5] ∈ ℂ"| bf1_1
-    bf2_1 ==>|"Y2[3] ∈ ℂ"| bf1_3
-    bf2_3 ==>|"Y2[7] ∈ ℂ"| bf1_3
-
-    bf1_0 --> out0 & out4
-    bf1_2 --> out2 & out6
-    bf1_1 --> out1 & out5
-    bf1_3 --> out3 & out7
+  o  bfly2_4 node (real operands)       ----  real net: only the _r bus carries data
+  @  bfly4_4 node (complex operands)    ====  complex net: _r and _i buses both used
+  upper node = x1 + Wk*x2,  lower node = x1 - Wk*x2,  Wk = W_8^k = exp(-j*2*pi*k/8)
+  A '|' that passes through a rail without a node is a crossing, not a connection.
 ```
 
-> **Legend:** Blue boxes are `bfly2_4` (real operands) and amber boxes are `bfly4_4` (complex operands). Thick edges carry complex values, so both the `_r` and `_i` buses are routed. Thin edges carry values that are provably real, so only the `_r` bus is routed. Edge labels are the RTL net names (`Y3_r/Y3_i`, `Y2_r/Y2_i`).
+> **Reading the diagram:** Each horizontal rail is one position of the in-place network. It enters as a bit-reversed sample and leaves as bin `X[p]`, so the spectrum comes out in natural order. Each vertical bar is one butterfly, labeled with its RTL instance and twiddle factor. Rail labels are the RTL net names (`Y3_r/Y3_i`, `Y2_r/Y2_i`).
 
 ### Reference Butterfly Network
 
@@ -322,22 +270,22 @@ Three stages need $`\log_2 8 = 3`$ guard bits. With a 9-bit word and **no satura
 
 ```text
 FFT8_TB                          testbench: stimulus + VCD dump
-└── DUT : DIT_FFT_8              top level: 3 stages, 12 butterflies
-    ├── Stage 3   (span 1)
-    │   ├── bf3_0 : bfly2_4      W⁰
-    │   ├── bf3_1 : bfly2_4      W⁰
-    │   ├── bf3_2 : bfly2_4      W⁰
-    │   └── bf3_3 : bfly2_4      W⁰
-    ├── Stage 2   (span 2)
-    │   ├── bf2_0 : bfly2_4      W⁰
-    │   ├── bf2_1 : bfly2_4      W²
-    │   ├── bf2_2 : bfly2_4      W⁰
-    │   └── bf2_3 : bfly2_4      W²
-    └── Stage 1   (span 4)
-        ├── bf1_0 : bfly2_4      W⁰
-        ├── bf1_1 : bfly4_4      W¹
-        ├── bf1_2 : bfly2_4      W²
-        └── bf1_3 : bfly4_4      W³
+`-- DUT : DIT_FFT_8              top level: 3 stages, 12 butterflies
+    |-- Stage 3   (span 1)
+    |   |-- bf3_0 : bfly2_4      W^0
+    |   |-- bf3_1 : bfly2_4      W^0
+    |   |-- bf3_2 : bfly2_4      W^0
+    |   `-- bf3_3 : bfly2_4      W^0
+    |-- Stage 2   (span 2)
+    |   |-- bf2_0 : bfly2_4      W^0
+    |   |-- bf2_1 : bfly2_4      W^2
+    |   |-- bf2_2 : bfly2_4      W^0
+    |   `-- bf2_3 : bfly2_4      W^2
+    `-- Stage 1   (span 4)
+        |-- bf1_0 : bfly2_4      W^0
+        |-- bf1_1 : bfly4_4      W^1
+        |-- bf1_2 : bfly2_4      W^2
+        `-- bf1_3 : bfly4_4      W^3
 ```
 
 <sub>Stages are logical groupings within <code>DIT_FFT_8</code>, not separate modules.</sub>
@@ -380,58 +328,31 @@ Y_2 = x_1 - W x_2 = (x_1 - W_r x_2) - j\,(W_i x_2)
 | `Y1_r`, `Y1_i` | output | 9 | Sum branch $`x_1 + W x_2`$ |
 | `Y2_r`, `Y2_i` | output | 9 | Difference branch $`x_1 - W x_2`$ |
 
-```mermaid
-flowchart LR
-    classDef io  fill:#f6f8fa,stroke:#6e7781,color:#24292f
-    classDef mul fill:#fef3c7,stroke:#b45309,stroke-width:1.5px,color:#4a2505
-    classDef bit fill:#ede9fe,stroke:#6d28d9,color:#2e1065
-    classDef add fill:#dbeafe,stroke:#1d4ed8,stroke-width:1.5px,color:#0c2a6b
+```text
+           TWIDDLE MULTIPLY  W * x2               BUTTERFLY  x1 +/- W * x2
+           9 b x 9 b = 18 b, keep [8:0]           sum / difference branch
 
-    x1["x1 · real · 9 b"]:::io
-    x2["x2 · real · 9 b"]:::io
-    Wr["W_r"]:::io
-    Wi["W_i"]:::io
-    zero["0"]:::io
+                                                  +-------+
+           +-------+                       x1 --->|+      |
+  x2 ----->|       |                              |  ADD  |-----> Y1_r = x1 + prod_r
+           |  MUL  |---- prod_r[8:0] ----+------->|+      |
+  W_r ---->|       |                     |        +-------+
+           +-------+                     |        +-------+
+                                         | x1 --->|+      |
+                                         |        |  SUB  |-----> Y2_r = x1 - prod_r
+                                         +------->|-      |
+                                                  +-------+
 
-    subgraph TW["Twiddle multiplication · W·x2"]
-        mulr(("×")):::mul
-        muli(("×")):::mul
-        prr["prod_r[8:0]<br/>Re(W·x2)"]:::bit
-        pri["prod_i[8:0]<br/>Im(W·x2)"]:::bit
-    end
-
-    subgraph BF["Butterfly add / subtract"]
-        a1(("+")):::add
-        s1(("−")):::add
-        a2(("+")):::add
-        s2(("−")):::add
-    end
-
-    Y1r["Y1_r"]:::io
-    Y2r["Y2_r"]:::io
-    Y1i["Y1_i"]:::io
-    Y2i["Y2_i"]:::io
-
-    x2 --> mulr
-    Wr --> mulr
-    x2 --> muli
-    Wi --> muli
-    mulr -->|"18 b"| prr
-    muli -->|"18 b"| pri
-
-    x1 --> a1
-    prr --> a1
-    x1 --> s1
-    prr -->|"subtrahend"| s1
-    zero --> a2
-    pri --> a2
-    zero --> s2
-    pri -->|"subtrahend"| s2
-
-    a1 --> Y1r
-    s1 --> Y2r
-    a2 --> Y1i
-    s2 --> Y2i
+                                                  +-------+
+           +-------+                        0 --->|+      |
+  x2 ----->|       |                              |  ADD  |-----> Y1_i = 0 + prod_i
+           |  MUL  |---- prod_i[8:0] ----+------->|+      |
+  W_i ---->|       |                     |        +-------+
+           +-------+                     |        +-------+
+                                         |  0 --->|+      |
+                                         |        |  SUB  |-----> Y2_i = 0 - prod_i
+                                         +------->|-      |
+                                                  +-------+
 ```
 
 **Resources (behavioral):** 2 × 9×9 signed multipliers, 2 adders, and 2 subtractors. At all ten instance sites the twiddle components are constants in $`\{-1, 0, 1\}`$, so after flattening, synthesis can reduce the multipliers to wiring or negation.
@@ -463,77 +384,38 @@ p_4 = \tfrac{x_{2i} W_r}{2^8}
 | `Y1_r`, `Y1_i` | output | 9 | Sum branch $`x_1 + W x_2`$ |
 | `Y2_r`, `Y2_i` | output | 9 | Difference branch $`x_1 - W x_2`$ |
 
-```mermaid
-flowchart LR
-    classDef io  fill:#f6f8fa,stroke:#6e7781,color:#24292f
-    classDef mul fill:#fef3c7,stroke:#b45309,stroke-width:1.5px,color:#4a2505
-    classDef bit fill:#ede9fe,stroke:#6d28d9,color:#2e1065
-    classDef add fill:#dbeafe,stroke:#1d4ed8,stroke-width:1.5px,color:#0c2a6b
+```text
+          COMPLEX MULTIPLY     COMBINE                        BUTTERFLY
+          keep [17:8] = >> 8   Re / Im of W*x2                x1 +/- W*x2
 
-    x2r["x2_r"]:::io
-    x2i["x2_i"]:::io
-    Wr["W_r · Q1.8"]:::io
-    Wi["W_i · Q1.8"]:::io
-    x1r["x1_r"]:::io
-    x1i["x1_i"]:::io
+          +-------+
+  x2_r -->|       |
+          |  MUL  |--p1--+                                    +-------+
+  W_r  -->|       |      |     +-------+              x1_r -->|+      |
+          +-------+      +---->|+      |                      |  ADD  |---> Y1_r
+          +-------+            |  SUB  |--Re(W*x2)--+-------->|+      |
+  x2_i -->|       |      +---->|-      |            |         +-------+
+          |  MUL  |--p2--+     +-------+            |         +-------+
+  W_i  -->|       |                                 | x1_r -->|+      |
+          +-------+                                 |         |  SUB  |---> Y2_r
+                                                    +-------->|-      |
+                                                              +-------+
 
-    subgraph CM["Complex twiddle multiplier · W·x2 · Q1.8 rescale by ≫ 8"]
-        m1(("×")):::mul
-        m2(("×")):::mul
-        m3(("×")):::mul
-        m4(("×")):::mul
-        p1["prod1[17:8]<br/>x2_r·W_r"]:::bit
-        p2["prod2[17:8]<br/>x2_i·W_i"]:::bit
-        p3["prod3[17:8]<br/>x2_r·W_i"]:::bit
-        p4["prod4[17:8]<br/>x2_i·W_r"]:::bit
-        cre(("−")):::add
-        cim(("+")):::add
-    end
+          +-------+
+  x2_r -->|       |
+          |  MUL  |--p3--+                                    +-------+
+  W_i  -->|       |      |     +-------+              x1_i -->|+      |
+          +-------+      +---->|+      |                      |  ADD  |---> Y1_i
+          +-------+            |  ADD  |--Im(W*x2)--+-------->|+      |
+  x2_i -->|       |      +---->|+      |            |         +-------+
+          |  MUL  |--p4--+     +-------+            |         +-------+
+  W_r  -->|       |                                 | x1_i -->|+      |
+          +-------+                                 |         |  SUB  |---> Y2_i
+                                                    +-------->|-      |
+                                                              +-------+
 
-    subgraph BF["Butterfly add / subtract"]
-        a1(("+")):::add
-        s1(("−")):::add
-        a2(("+")):::add
-        s2(("−")):::add
-    end
-
-    Y1r["Y1_r"]:::io
-    Y2r["Y2_r"]:::io
-    Y1i["Y1_i"]:::io
-    Y2i["Y2_i"]:::io
-
-    x2r --> m1
-    Wr  --> m1
-    x2i --> m2
-    Wi  --> m2
-    x2r --> m3
-    Wi  --> m3
-    x2i --> m4
-    Wr  --> m4
-
-    m1 -->|"18 b"| p1
-    m2 -->|"18 b"| p2
-    m3 -->|"18 b"| p3
-    m4 -->|"18 b"| p4
-
-    p1 --> cre
-    p2 -->|"subtrahend"| cre
-    p3 --> cim
-    p4 --> cim
-
-    x1r --> a1
-    cre -->|"Re(W·x2)"| a1
-    x1r --> s1
-    cre -->|"Re(W·x2)"| s1
-    x1i --> a2
-    cim -->|"Im(W·x2)"| a2
-    x1i --> s2
-    cim -->|"Im(W·x2)"| s2
-
-    a1 --> Y1r
-    s1 --> Y2r
-    a2 --> Y1i
-    s2 --> Y2i
+  p1 = prod1[17:8] = (x2_r * W_r) >> 8      p3 = prod3[17:8] = (x2_r * W_i) >> 8
+  p2 = prod2[17:8] = (x2_i * W_i) >> 8      p4 = prod4[17:8] = (x2_i * W_r) >> 8
 ```
 
 **Resources (behavioral):** 4 × 9×9 signed multipliers, 2 product-combining adders, 2 adders, and 2 subtractors. Every coefficient component in use is ±181 (binary `10110101`), so each product can be built as a five-term constant shift-add network: $`181 = 2^7 + 2^5 + 2^4 + 2^2 + 2^0`$.
@@ -558,18 +440,18 @@ The 10-bit slice `prod[17:8]` gives one extra bit of headroom for the intermedia
 
 ```text
 FFT/
-├── DIT_FFT_8.v                 # Top level: 8-point DIT-FFT network (3 stages, 12 butterflies)
-├── bfly2_4.v                   # Processing element: real-input butterfly (2 multipliers)
-├── bfly4_4.v                   # Processing element: complex-input butterfly (4 multipliers, Q1.8)
-├── FFT8_TB.v                   # Directed-stimulus testbench; dumps DIT_FFT8.vcd
-├── Description/
-│   ├── butterflies.PNG         # Annotated 8-point DIT butterfly network (Figure 1)
-│   ├── Design.txt              # Design rationale: real/complex signal propagation
-│   └── readme.txt              # Module roles and PE usage summary
-├── simulation results/
-│   ├── DC input.PNG            # Waveform capture: x[n] = 1           →  X[0] = 8
-│   └── Alterning input.PNG     # Waveform capture: x[n] = 1,0,1,0,…   →  X[0] = X[4] = 4
-└── README.md
+|-- DIT_FFT_8.v                 # Top level: 8-point DIT-FFT network (3 stages, 12 butterflies)
+|-- bfly2_4.v                   # Processing element: real-input butterfly (2 multipliers)
+|-- bfly4_4.v                   # Processing element: complex-input butterfly (4 multipliers, Q1.8)
+|-- FFT8_TB.v                   # Directed-stimulus testbench; dumps DIT_FFT8.vcd
+|-- Description/
+|   |-- butterflies.PNG         # Annotated 8-point DIT butterfly network (Figure 1)
+|   |-- Design.txt              # Design rationale: real/complex signal propagation
+|   `-- readme.txt              # Module roles and PE usage summary
+|-- simulation results/
+|   |-- DC input.PNG            # Waveform capture: x[n] = 1            ->  X[0] = 8
+|   `-- Alterning input.PNG     # Waveform capture: x[n] = 1,0,1,0,...  ->  X[0] = X[4] = 4
+`-- README.md
 ```
 
 ---
